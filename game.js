@@ -244,6 +244,11 @@
     state.hand = state.deck.splice(0, handSize);
   }
 
+  function drawOneCardToHand() {
+    if (!state.deck || state.deck.length === 0) return;
+    state.hand.push(state.deck.shift());
+  }
+
   function getHand() {
     if (!state.hand || state.hand.length === 0) drawHand();
     return state.hand;
@@ -256,6 +261,7 @@
         break;
       }
     }
+    drawOneCardToHand();
   }
 
   function startCombat(count) {
