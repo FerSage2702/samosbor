@@ -162,10 +162,7 @@
 
   function getEnemyCount(act, isFinale) {
     act = act || 1;
-    if (act === 1) {
-      if (isFinale) return roll(1, 2);
-      return 1;
-    }
+    if (act === 1) return 1;
     if (act === 2) {
       if (isFinale) return 3;
       return roll(1, 2);
