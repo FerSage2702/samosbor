@@ -1,0 +1,339 @@
+:root {
+  --bg: #1a1a1f;
+  --surface: #252530;
+  --border: #3a3a4a;
+  --text: #e8e6e3;
+  --muted: #888;
+  --accent: #c9a227;
+  --danger: #c44;
+  --heal: #4a8;
+  --fire: #e85;
+  --bleed: #a44;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.game-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem;
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.player-hp {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.hp-bar {
+  flex: 1;
+  height: 20px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--danger), var(--heal));
+  transition: width 0.3s;
+}
+
+.hp-value {
+  min-width: 5ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.btn-reset {
+  padding: 0.4rem 0.8rem;
+  background: var(--border);
+  color: var(--text);
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-reset:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.screen {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.screen h1,
+.screen h2 {
+  margin-top: 0;
+  color: var(--accent);
+}
+
+.current-node {
+  margin-bottom: 1rem;
+  font-size: 1.05rem;
+}
+
+.map-moves {
+  margin-top: 1rem;
+}
+
+.map-moves p {
+  margin-bottom: 0.5rem;
+  color: var(--muted);
+}
+
+.move-form {
+  margin-bottom: 0.5rem;
+}
+
+.btn {
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.btn-move {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-move:hover {
+  background: var(--border);
+  border-color: var(--accent);
+}
+
+.node-type {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.1);
+}
+
+.rest-info,
+.shop-info,
+.finish-info {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(201, 162, 39, 0.1);
+  border-radius: 8px;
+  border-left: 4px solid var(--accent);
+}
+
+.combat-enemies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.enemy-card {
+  width: 140px;
+  padding: 0.75rem;
+  background: var(--bg);
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.enemy-card:hover {
+  border-color: var(--accent);
+}
+
+.enemy-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.enemy-card.enemy-aggressive {
+  border-color: var(--danger);
+}
+
+.enemy-image {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 0.5rem;
+  border-radius: 8px;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.enemy-image svg {
+  display: block;
+}
+
+.enemy-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.enemy-hp {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.enemy-hp-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 2px;
+}
+
+.enemy-hp-fill {
+  height: 100%;
+  background: var(--heal);
+  transition: width 0.3s;
+}
+
+.status {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+}
+
+.status-fire {
+  background: var(--fire);
+  color: var(--bg);
+}
+
+.status-bleed {
+  background: var(--bleed);
+  color: #fff;
+}
+
+.combat-log {
+  max-height: 120px;
+  overflow-y: auto;
+  background: var(--bg);
+  padding: 0.5rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.log-line {
+  padding: 0.15rem 0;
+}
+
+.hand-label {
+  margin-bottom: 0.5rem;
+  color: var(--muted);
+}
+
+.hand-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.card-btn {
+  padding: 0.6rem 0.9rem;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-align: center;
+  min-width: 100px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.card-btn:hover {
+  border-color: var(--accent);
+  background: rgba(201, 162, 39, 0.1);
+}
+
+.card-name {
+  display: block;
+  font-weight: 600;
+}
+
+.card-damage {
+  font-size: 0.8rem;
+  color: var(--danger);
+}
+
+.card-heal {
+  font-size: 0.8rem;
+  color: var(--heal);
+}
+
+.target-hint {
+  margin-top: 0.5rem;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.turn-info {
+  margin-bottom: 0.5rem;
+}
+
+.screen-defeat {
+  text-align: center;
+  padding: 2rem;
+}
+
+.screen-defeat h1 {
+  color: var(--danger);
+}
+
+.screen-defeat .btn {
+  margin-top: 1rem;
+}

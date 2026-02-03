@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Самосбор — карточная игра</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-wrap">
+        <header class="header">
+            <div class="player-hp">
+                <span class="hp-label">HP</span>
+                <div class="hp-bar"><div class="hp-fill" id="hpFill"></div></div>
+                <span class="hp-value" id="hpValue">100 / 100</span>
+            </div>
+            <div class="progress" id="progress">Побед: 0</div>
+            <button type="button" class="btn-reset" id="btnReset">Новая игра</button>
+        </header>
+        <main class="main" id="main"></main>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
