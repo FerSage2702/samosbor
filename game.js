@@ -54,31 +54,58 @@
     },
     shop_random_pool: ['extra_life', 'trashcan_lid', 'trashcan', 'axe', 'sgushka', 'gvozdomet', 'rocket', 'medkit', 'bread'],
     enemies_progression: { 0: 1, 2: 2, 5: 3 },
-    unlock_locations: {
-      axe: ['shop_1', 'node_5'], sgushka: ['shop_2', 'node_8'], gvozdomet: ['shop_1', 'node_12'],
-      rocket: ['shop_2', 'node_15'], medkit: ['rest_1', 'shop_1', 'node_7'], bread: ['rest_1', 'shop_1', 'shop_2']
+    location_names: {
+      enemy: ['Тёмная аллея', 'Развалины', 'Подвал', 'Туннель', 'Заброшка', 'Опасная зона', 'Глушь', 'Свалка', 'Канализация', 'Разрушенный дом', 'Тёмный переулок', 'Заброшенный склад', 'Проклятое место', 'Логово мутантов', 'Радиационная зона'],
+      rest: ['Привал', 'Кострище', 'Укрытие', 'Ночлёг', 'Безопасная зона', 'Развалины с костром', 'Тайное убежище', 'Перекрёсток путников', 'Сухой подвал', 'Заброшенная избушка'],
+      shop: ['Торговец', 'Склад', 'База', 'Лагерь торговцев', 'Подпольный рынок', 'Склад контрабанды', 'Точка обмена', 'Тайный продавец', 'База сталкеров']
     }
   };
 
-  var MAP = {
-    start: { id: 'start', type: 'start', next: ['node_1', 'node_2'], name: 'Старт' },
-    node_1: { id: 'node_1', type: 'enemy', next: ['node_3'], name: 'Тёмная аллея' },
-    node_2: { id: 'node_2', type: 'rest', next: ['node_4'], name: 'Привал' },
-    node_3: { id: 'node_3', type: 'shop', next: ['node_5', 'node_6'], name: 'Торговец' },
-    node_4: { id: 'node_4', type: 'enemy', next: ['node_6'], name: 'Развалины' },
-    node_5: { id: 'node_5', type: 'enemy', next: ['node_7'], name: 'Подвал' },
-    node_6: { id: 'node_6', type: 'rest', next: ['node_8'], name: 'Кострище' },
-    node_7: { id: 'node_7', type: 'shop', next: ['node_9'], name: 'Склад' },
-    node_8: { id: 'node_8', type: 'enemy', next: ['node_10'], name: 'Туннель' },
-    node_9: { id: 'node_9', type: 'enemy', next: ['node_11'], name: 'Заброшка' },
-    node_10: { id: 'node_10', type: 'rest', next: ['node_12'], name: 'Укрытие' },
-    node_11: { id: 'node_11', type: 'enemy', next: ['node_13'], name: 'Опасная зона' },
-    node_12: { id: 'node_12', type: 'shop', next: ['node_14'], name: 'База' },
-    node_13: { id: 'node_13', type: 'rest', next: ['node_15'], name: 'Ночлёг' },
-    node_14: { id: 'node_14', type: 'enemy', next: ['finish'], name: 'Финал' },
-    node_15: { id: 'node_15', type: 'enemy', next: ['finish'], name: 'Финал' },
-    finish: { id: 'finish', type: 'finish', next: [], name: 'Победа' }
-  };
+  function generateMap() {
+    var names = CONFIG.location_names;
+    var map = {};
+    var nodeId = 0;
+    function nextId() { return 'n' + (nodeId++); }
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function pickType() {
+      var r = Math.random();
+      if (r < 0.55) return 'enemy';
+      if (r < 0.8) return 'rest';
+      return 'shop';
+    }
+    map.start = { id: 'start', type: 'start', next: [], name: 'Старт' };
+    map.finish = { id: 'finish', type: 'finish', next: [], name: 'Победа' };
+    var layerCount = roll(5, 8);
+    var prevIds = ['start'];
+    for (var L = 0; L < layerCount; L++) {
+      var nodeCount = roll(2, 4);
+      if (L === layerCount - 1) nodeCount = 1;
+      var currIds = [];
+      for (var i = 0; i < nodeCount; i++) {
+        var id = L === layerCount - 1 ? 'finish' : nextId();
+        var type = L === layerCount - 1 ? 'finish' : pickType();
+        var name = type === 'finish' ? 'Победа' : pick(names[type]);
+        map[id] = { id: id, type: type, next: [], name: name };
+        currIds.push(id);
+      }
+      prevIds.forEach(function (fromId) {
+        var links = Math.min(currIds.length, roll(1, 2));
+        var connected = {};
+        for (var j = 0; j < links; j++) {
+          var toId = currIds[Math.floor(Math.random() * currIds.length)];
+          if (map[fromId].next.indexOf(toId) === -1) map[fromId].next.push(toId);
+        }
+        if (map[fromId].next.length === 0 && currIds.length > 0)
+          map[fromId].next.push(currIds[0]);
+      });
+      prevIds = currIds;
+    }
+    prevIds.forEach(function (fromId) {
+      if (map[fromId] && map[fromId].type !== 'finish' && map[fromId].next.indexOf('finish') === -1)
+        map[fromId].next.push('finish');
+    });
+    return map;
+  }
 
   function enemySvg(key, uid) {
     var svgs = {
@@ -101,9 +128,11 @@
     },
     deck: [], hand: [],
     shop_random_items: [],
+    map: null,
     progress: { battles_won: 0, nodes_visited: {}, current_node: 'start' },
     combat: null
   };
+  if (!state.map || !state.map.start) state.map = generateMap();
 
   function getEnemyCount() {
     var won = state.progress.battles_won;
@@ -123,11 +152,6 @@
   }
 
   function tryUnlockCards(nodeId) {
-    var loc = CONFIG.unlock_locations;
-    for (var card in loc) {
-      if (loc[card].indexOf(nodeId) !== -1 && state.player.unlocked_cards.indexOf(card) === -1)
-        state.player.unlocked_cards.push(card);
-    }
   }
 
   function restHeal() {
@@ -573,6 +597,7 @@
   }
 
   function moveTo(nodeId) {
+    var MAP = state.map;
     var node = MAP[state.progress.current_node];
     if (!node || (node.next || []).indexOf(nodeId) === -1) return { ok: false, error: 'Неверный узел' };
     state.progress.current_node = nodeId;
@@ -597,6 +622,7 @@
     state.deck = [];
     state.hand = [];
     state.shop_random_items = [];
+    state.map = generateMap();
     state.progress = { battles_won: 0, nodes_visited: {}, current_node: 'start' };
     state.combat = null;
   }
@@ -648,7 +674,7 @@
     }
 
     if (state.combat) {
-      var node = MAP[state.progress.current_node];
+      var node = state.map[state.progress.current_node];
       var ap = state.combat.action_points;
       var html = '<section class="screen screen-combat"><h2>Бой — ' + escapeHtml(node.name) + '</h2>';
       html += '<div class="combat-stats"><span class="ap-display">Очки действий: ' + ap + ' / ' + state.combat.max_action_points + '</span>';
@@ -730,6 +756,7 @@
       return;
     }
 
+    var MAP = state.map;
     var currentNode = MAP[state.progress.current_node] || MAP.start;
     var nextIds = currentNode.next || [];
     var html = '<section class="screen screen-map"><h2>Карта</h2>';
