@@ -341,7 +341,9 @@
       }
       if ((en[i].acid_rounds || 0) > 0) en[i].acid_rounds--;
     }
+    var killed = en.filter(function (e) { return e.hp <= 0; });
     state.combat.enemies = en.filter(function (e) { return e.hp > 0; });
+    return killed;
   }
 
   function getBlockAmount() {
@@ -384,7 +386,13 @@
 
   function endPlayerTurn() {
     state.combat.turn = 'enemy';
-    applyBleedAndFire();
+    var killed = applyBleedAndFire();
+    if (state.combat.enemies.length === 0) {
+      dropLoot(killed);
+      state.progress.battles_won++;
+      state.combat = null;
+      return;
+    }
     enemyTurn();
   }
 
