@@ -874,8 +874,9 @@
     html += '</div>';
     }
     if (currentNode.type === 'rest') {
-      html += '<div class="rest-info">Вы отдохнули. +25 HP, +1 хлеб (макс. 3).</div>';
-      html += '<div class="rest-loot"><strong>Дополнительно найдено:</strong> ' + (state.progress.last_rest_loot ? escapeHtml(state.progress.last_rest_loot.text) : '—') + '</div>';
+      html += '<div class="rest-info">Отдых: +25 HP, хлеб в запас +1 (макс. 3).</div>';
+      var lootText = state.progress.last_rest_loot ? state.progress.last_rest_loot.text : '—';
+      html += '<div class="rest-loot"><strong>Найдено здесь:</strong> ' + escapeHtml(lootText) + '</div>';
     }
     if (currentNode.type === 'shop' && !document.querySelector('.shop-panel')) { }
     if (currentNode.type === 'finish') {
