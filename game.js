@@ -40,12 +40,19 @@
       }
     },
     shop: {
-      hp_upgrade: { cost: 30, hp_bonus: 15 },
-      extra_life: { cost: 50 },
-      trashcan_lid: { cost: 25 },
-      trashcan: { cost: 45 },
+      hp_upgrade: { cost: 30, hp_bonus: 15, permanent: true },
+      extra_life: { cost: 50, name: 'Доп. жизнь' },
+      trashcan_lid: { cost: 25, name: 'Крышка ведра (блок 6)', type: 'shield' },
+      trashcan: { cost: 45, name: 'Мусорное ведро (блок 12)', type: 'shield' },
+      axe: { cost: 40, name: 'Топор', type: 'weapon' },
+      sgushka: { cost: 35, name: 'Сгушка', type: 'weapon' },
+      gvozdomet: { cost: 35, name: 'Гвоздомет', type: 'weapon' },
+      rocket: { cost: 50, name: 'Сигнальная ракета', type: 'weapon' },
+      medkit: { cost: 25, name: 'Аптечка', type: 'heal' },
+      bread: { cost: 10, name: 'Буханка хлеба', type: 'heal' },
       element_upgrade: { cost: 20 }
     },
+    shop_random_pool: ['extra_life', 'trashcan_lid', 'trashcan', 'axe', 'sgushka', 'gvozdomet', 'rocket', 'medkit', 'bread'],
     enemies_progression: { 0: 1, 2: 2, 5: 3 },
     unlock_locations: {
       axe: ['shop_1', 'node_5'], sgushka: ['shop_2', 'node_8'], gvozdomet: ['shop_1', 'node_12'],
@@ -93,6 +100,7 @@
       elements_inventory: {}
     },
     deck: [], hand: [],
+    shop_random_items: [],
     progress: { battles_won: 0, nodes_visited: {}, current_node: 'start' },
     combat: null
   };
@@ -512,10 +520,19 @@
       state.player.shield = 'trashcan_lid';
     } else if (item === 'trashcan') {
       state.player.shield = 'trashcan';
+    } else if (item === 'bread') {
+      if (state.player.bread_count >= 3) return { ok: false, error: 'Макс. хлеба (3)' };
+      state.player.bread_count++;
+    } else if (['axe', 'sgushka', 'gvozdomet', 'rocket', 'medkit'].indexOf(item) !== -1) {
+      if (state.player.unlocked_cards.indexOf(item) !== -1) return { ok: false, error: 'Уже куплено' };
+      state.player.unlocked_cards.push(item);
     } else if (item === 'element_upgrade') {
       return { ok: false, error: 'Используйте прокачку элемента на оружии' };
     }
     state.player.coins -= shop.cost;
+    if (state.shop_random_items.indexOf(item) !== -1) {
+      state.shop_random_items.splice(state.shop_random_items.indexOf(item), 1);
+    }
     return { ok: true };
   }
 
@@ -534,6 +551,27 @@
     return { ok: true };
   }
 
+  function generateShopItems() {
+    var pool = CONFIG.shop_random_pool;
+    var p = state.player;
+    var available = pool.filter(function (key) {
+      if (key === 'trashcan_lid') return p.shield !== 'trashcan_lid' && p.shield !== 'trashcan';
+      if (key === 'trashcan') return p.shield !== 'trashcan';
+      if (key === 'bread') return p.bread_count < 3;
+      if (['axe', 'sgushka', 'gvozdomet', 'rocket', 'medkit'].indexOf(key) !== -1)
+        return p.unlocked_cards.indexOf(key) === -1;
+      if (key === 'extra_life') return true;
+      return true;
+    });
+    var count = Math.min(3, Math.max(2, available.length));
+    var shuffled = available.slice();
+    for (var i = shuffled.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t;
+    }
+    state.shop_random_items = shuffled.slice(0, count);
+  }
+
   function moveTo(nodeId) {
     var node = MAP[state.progress.current_node];
     if (!node || (node.next || []).indexOf(nodeId) === -1) return { ok: false, error: 'Неверный узел' };
@@ -546,6 +584,7 @@
       return { ok: true, combat: true };
     }
     if (node.type === 'rest') restHeal();
+    if (node.type === 'shop') generateShopItems();
     return { ok: true };
   }
 
@@ -557,6 +596,7 @@
     };
     state.deck = [];
     state.hand = [];
+    state.shop_random_items = [];
     state.progress = { battles_won: 0, nodes_visited: {}, current_node: 'start' };
     state.combat = null;
   }
@@ -704,11 +744,16 @@
       if (elemInv.length) html += '<p class="elements-display">Элементы: ' + elemInv.join(', ') + '</p>';
       html += '<div class="shop-items">';
       html += '<button type="button" class="shop-btn" data-item="hp_upgrade">+15 HP макс. (' + CONFIG.shop.hp_upgrade.cost + ' монет)</button>';
-      html += '<button type="button" class="shop-btn" data-item="extra_life">Доп. жизнь (' + CONFIG.shop.extra_life.cost + ' монет)</button>';
-      if (p.shield !== 'trashcan_lid' && p.shield !== 'trashcan')
-        html += '<button type="button" class="shop-btn" data-item="trashcan_lid">Крышка ведра — блок 6 (' + CONFIG.shop.trashcan_lid.cost + ')</button>';
-      if (p.shield !== 'trashcan')
-        html += '<button type="button" class="shop-btn" data-item="trashcan">Мусорное ведро — блок 12 (' + CONFIG.shop.trashcan.cost + ')</button>';
+      state.shop_random_items.forEach(function (key) {
+        var s = CONFIG.shop[key];
+        if (!s) return;
+        if (key === 'trashcan_lid' && (p.shield === 'trashcan' || p.shield === 'trashcan_lid')) return;
+        if (key === 'trashcan' && p.shield === 'trashcan') return;
+        if (key === 'bread' && p.bread_count >= 3) return;
+        if (['axe', 'sgushka', 'gvozdomet', 'rocket', 'medkit'].indexOf(key) !== -1 && p.unlocked_cards.indexOf(key) !== -1) return;
+        var label = (s.name || key) + ' (' + s.cost + ' монет)';
+        html += '<button type="button" class="shop-btn" data-item="' + escapeHtml(key) + '">' + escapeHtml(label) + '</button>';
+      });
       html += '</div>';
       html += '<h4>Прокачка оружия элементами (20 монет за уровень)</h4><div class="element-upgrades">';
       var weapons = getWeaponCards();
