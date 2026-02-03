@@ -160,11 +160,17 @@
   };
   if (!state.map || !state.map.start) state.map = generateMap();
 
-  function getEnemyCount() {
-    var won = state.progress.battles_won;
-    if (won >= 5) return 3;
-    if (won >= 2) return 2;
-    return 1;
+  function getEnemyCount(act, isFinale) {
+    act = act || 1;
+    if (act === 1) {
+      if (isFinale) return roll(1, 2);
+      return 1;
+    }
+    if (act === 2) {
+      if (isFinale) return 3;
+      return roll(1, 2);
+    }
+    return roll(1, 3);
   }
 
   function getAggressiveChance() {
@@ -631,7 +637,9 @@
     node = MAP[nodeId];
     tryUnlockCards(nodeId);
     if (node.type === 'enemy') {
-      startCombat(getEnemyCount());
+      var act = state.progress.floor_chapter || 1;
+      var isFinale = node.floor === FLOORS_PER_CHAPTER - 1;
+      startCombat(getEnemyCount(act, isFinale));
       return { ok: true, combat: true };
     }
     if (node.type === 'rest') restHeal();
