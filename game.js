@@ -167,7 +167,12 @@
       if (isFinale) return 3;
       return roll(1, 2);
     }
-    return roll(1, 3);
+    if (act === 3) {
+      if (isFinale) return 3;
+      return roll(1, 3);
+    }
+    if (isFinale) return roll(4, 5);
+    return roll(2, 4);
   }
 
   function getAggressiveChance() {
@@ -616,11 +621,27 @@
     return { ok: true };
   }
 
+  function getWeaponElementType(weaponKey) {
+    var we = state.player.weapon_elements[weaponKey] || {};
+    for (var ek in we) if (we[ek] > 0) return ek;
+    return null;
+  }
+
+  function resetWeaponElements(weaponKey) {
+    state.player.weapon_elements[weaponKey] = {};
+    return { ok: true };
+  }
+
   function buyElementUpgrade(weaponKey, elementKey) {
+    if (weaponKey === 'sgushka' && elementKey === 'frost')
+      return { ok: false, error: 'На сгушку нельзя поставить мороз' };
     var inv = state.player.elements_inventory[elementKey] || 0;
     if (inv <= 0) return { ok: false, error: 'Нет элементов ' + (ELEMENTS[elementKey] ? ELEMENTS[elementKey].name : elementKey) };
     var we = state.player.weapon_elements[weaponKey] || {};
     var cur = we[elementKey] || 0;
+    var existingElem = getWeaponElementType(weaponKey);
+    if (existingElem && existingElem !== elementKey)
+      return { ok: false, error: 'На оружии может быть только один элемент. Сбросьте элементы.' };
     if (cur >= 3) return { ok: false, error: 'Макс. уровень элемента на оружии' };
     var cost = CONFIG.shop.element_upgrade.cost;
     if (state.player.coins < cost) return { ok: false, error: 'Недостаточно монет (' + cost + ')' };
@@ -844,21 +865,25 @@
         html += '<button type="button" class="shop-btn" data-item="' + escapeHtml(key) + '">' + escapeHtml(label) + '</button>';
       });
       html += '</div>';
-      html += '<h4>Прокачка оружия элементами (20 монет за уровень)</h4><div class="element-upgrades">';
+      html += '<h4>Прокачка оружия элементами (20 монет за уровень, один элемент на оружие)</h4><div class="element-upgrades">';
       var weapons = getWeaponCards();
       weapons.forEach(function (wk) {
         var we = p.weapon_elements[wk] || {};
+        var existingElem = getWeaponElementType(wk);
         var cardName = CONFIG.cards[wk] ? CONFIG.cards[wk].name : wk;
         html += '<div class="weapon-row"><span class="weapon-name">' + escapeHtml(cardName) + ':</span> ';
         ELEMENT_KEYS.forEach(function (ek) {
+          if (wk === 'sgushka' && ek === 'frost') return;
           var cur = we[ek] || 0;
           var inv = p.elements_inventory[ek] || 0;
           var name = ELEMENTS[ek] ? ELEMENTS[ek].name : ek;
+          if (existingElem && existingElem !== ek) return;
           if (cur < 3 && inv > 0)
             html += '<button type="button" class="elem-btn" data-weapon="' + wk + '" data-elem="' + ek + '">' + name + ' +1 (есть ' + inv + ')</button> ';
           else if (cur > 0)
             html += '<span class="elem-owned">' + name + ' x' + cur + '</span> ';
         });
+        if (existingElem) html += '<button type="button" class="elem-reset-btn" data-weapon="' + wk + '">Сбросить</button>';
         html += '</div>';
       });
       html += '</div></div>';
@@ -911,6 +936,12 @@
       btn.onclick = function () {
         var r = buyElementUpgrade(btn.dataset.weapon, btn.dataset.elem);
         if (!r.ok) alert(r.error); else render();
+      };
+    });
+    main.querySelectorAll('.elem-reset-btn').forEach(function (btn) {
+      btn.onclick = function () {
+        resetWeaponElements(btn.dataset.weapon);
+        render();
       };
     });
   }
