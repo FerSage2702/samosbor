@@ -269,18 +269,26 @@
     drawOneCardToHand();
   }
 
+  function getEnemyHpMultiplier() {
+    var act = state.progress.floor_chapter || 1;
+    if (act < 5) return 1;
+    return 1 + (act - 5) * 0.1;
+  }
+
   function startCombat(count) {
     var types = Object.keys(CONFIG.enemies);
     var enemies = [];
     var aggChance = getAggressiveChance();
+    var hpMult = getEnemyHpMultiplier();
     for (var i = 0; i < count; i++) {
       var type = types[Math.floor(Math.random() * types.length)];
       var base = CONFIG.enemies[type];
       var agg = Math.random() < aggChance && base.aggressive;
       var e = agg ? base.aggressive : { name: base.name, hp: base.hp, damage_min: base.damage_min, damage_max: base.damage_max, image: base.image, coins: base.coins };
       var coins = e.coins || base.coins || 5;
+      var hp = Math.max(1, Math.floor(e.hp * hpMult));
       enemies.push({
-        id: 'e' + i, type: type, name: e.name, hp: e.hp, max_hp: e.hp,
+        id: 'e' + i, type: type, name: e.name, hp: hp, max_hp: hp,
         damage_min: e.damage_min, damage_max: e.damage_max, image: e.image,
         aggressive: !!agg, bleed: 0, fire_rounds: 0, freeze_rounds: 0, acid_rounds: 0,
         acid_damage_boost: 0, coins: coins
@@ -621,6 +629,10 @@
     return { ok: true };
   }
 
+  function getMaxElementLevel() {
+    return (state.progress.floor_chapter || 1) >= 5 ? 4 : 3;
+  }
+
   function getWeaponElementType(weaponKey) {
     var we = state.player.weapon_elements[weaponKey] || {};
     for (var ek in we) if (we[ek] > 0) return ek;
@@ -642,7 +654,8 @@
     var existingElem = getWeaponElementType(weaponKey);
     if (existingElem && existingElem !== elementKey)
       return { ok: false, error: 'На оружии может быть только один элемент. Сбросьте элементы.' };
-    if (cur >= 3) return { ok: false, error: 'Макс. уровень элемента на оружии' };
+    var maxLevel = getMaxElementLevel();
+    if (cur >= maxLevel) return { ok: false, error: 'Макс. уровень элемента на оружии (' + maxLevel + ')' };
     var cost = CONFIG.shop.element_upgrade.cost;
     if (state.player.coins < cost) return { ok: false, error: 'Недостаточно монет (' + cost + ')' };
     state.player.coins -= cost;
@@ -872,13 +885,14 @@
         var existingElem = getWeaponElementType(wk);
         var cardName = CONFIG.cards[wk] ? CONFIG.cards[wk].name : wk;
         html += '<div class="weapon-row"><span class="weapon-name">' + escapeHtml(cardName) + ':</span> ';
+        var maxElemLevel = getMaxElementLevel();
         ELEMENT_KEYS.forEach(function (ek) {
           if (wk === 'sgushka' && ek === 'frost') return;
           var cur = we[ek] || 0;
           var inv = p.elements_inventory[ek] || 0;
           var name = ELEMENTS[ek] ? ELEMENTS[ek].name : ek;
           if (existingElem && existingElem !== ek) return;
-          if (cur < 3 && inv > 0)
+          if (cur < maxElemLevel && inv > 0)
             html += '<button type="button" class="elem-btn" data-weapon="' + wk + '" data-elem="' + ek + '">' + name + ' +1 (есть ' + inv + ')</button> ';
           else if (cur > 0)
             html += '<span class="elem-owned">' + name + ' x' + cur + '</span> ';
