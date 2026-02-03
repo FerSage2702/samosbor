@@ -191,17 +191,13 @@
   function giveRestLoot() {
     var choice = roll(1, 3);
     if (choice === 1) {
-      var healType = roll(1, 2);
-      if (healType === 1) {
-        state.player.bread_count = Math.min(3, state.player.bread_count + 1);
-        return { type: 'heal', text: 'Буханка хлеба (+1 в запас)' };
-      }
       if (state.player.unlocked_cards.indexOf('medkit') === -1) {
         state.player.unlocked_cards.push('medkit');
-        return { type: 'heal', text: 'Найдена аптечка (добавлена в колоду)' };
+        return { type: 'heal', text: 'Аптечка (добавлена в колоду)' };
       }
-      state.player.bread_count = Math.min(3, state.player.bread_count + 1);
-      return { type: 'heal', text: 'Буханка хлеба (+1 в запас)' };
+      var extraCoins = roll(5, 12);
+      state.player.coins += extraCoins;
+      return { type: 'heal', text: extraCoins + ' монет (вместо повторной аптечки)' };
     }
     if (choice === 2) {
       var amount = roll(8, 22);
@@ -873,9 +869,7 @@
     }
     if (currentNode.type === 'rest') {
       html += '<div class="rest-info">Вы отдохнули. +25 HP, +1 хлеб (макс. 3).</div>';
-      if (state.progress.last_rest_loot) {
-        html += '<div class="rest-loot">Найдено: ' + escapeHtml(state.progress.last_rest_loot.text) + '.</div>';
-      }
+      html += '<div class="rest-loot"><strong>Дополнительно найдено:</strong> ' + (state.progress.last_rest_loot ? escapeHtml(state.progress.last_rest_loot.text) : '—') + '</div>';
     }
     if (currentNode.type === 'shop' && !document.querySelector('.shop-panel')) { }
     if (currentNode.type === 'finish') {
