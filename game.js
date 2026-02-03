@@ -1,8 +1,16 @@
 (function () {
   'use strict';
 
+  var ELEMENTS = {
+    electric: { name: 'Электро', damagePerLevel: 2, desc: 'Доп. урон по др. целям' },
+    frost: { name: 'Мороз', damagePerLevel: 1, freezeRounds: 1, desc: 'Цель застывает на ход' },
+    fire: { name: 'Огонь', burnRounds: 2, burnDamagePerLevel: 2, desc: 'Горение 2 хода' },
+    acid: { name: 'Кислота', weakenPercent: 10, damageBoostPercent: 15, desc: 'Ослабляет врага, +урон' }
+  };
+  var ELEMENT_KEYS = Object.keys(ELEMENTS);
+
   var CONFIG = {
-    player: { max_hp: 100 },
+    player: { max_hp: 100, base_action_points: 3 },
     cards: {
       fist: { name: 'Кулак', type: 'weapon', damage_min: 3, damage_max: 8, target: 'single', effect: null, unlock_from_start: true },
       knife: { name: 'Нож', type: 'weapon', damage_min: 12, damage_max: 18, target: 'single', effect: null, unlock_from_start: true },
@@ -13,19 +21,30 @@
       medkit: { name: 'Аптечка', type: 'heal', heal: 30, unlock_from_start: false },
       bread: { name: 'Буханка хлеба', type: 'heal', heal: 10, unlock_from_start: true, start_count: 1 }
     },
+    shields: {
+      trashcan_lid: { name: 'Крышка от ведра', block: 6, type: 'medium' },
+      trashcan: { name: 'Мусорное ведро', block: 12, type: 'high' }
+    },
     enemies: {
       rat: {
-        name: 'Крыса', hp: 25, damage_min: 4, damage_max: 10, image: 'rat',
-        aggressive: { name: 'Крыса (агрессивная)', hp: 40, damage_min: 8, damage_max: 16, image: 'rat_agg' }
+        name: 'Крыса', hp: 25, damage_min: 4, damage_max: 10, image: 'rat', coins: 3,
+        aggressive: { name: 'Крыса (агрессивная)', hp: 40, damage_min: 8, damage_max: 16, image: 'rat_agg', coins: 6 }
       },
       stalker: {
-        name: 'Сталкер', hp: 35, damage_min: 6, damage_max: 12, image: 'stalker',
-        aggressive: { name: 'Сталкер (агрессивный)', hp: 55, damage_min: 12, damage_max: 20, image: 'stalker_agg' }
+        name: 'Сталкер', hp: 35, damage_min: 6, damage_max: 12, image: 'stalker', coins: 5,
+        aggressive: { name: 'Сталкер (агрессивный)', hp: 55, damage_min: 12, damage_max: 20, image: 'stalker_agg', coins: 10 }
       },
       mutant: {
-        name: 'Мутант', hp: 45, damage_min: 10, damage_max: 18, image: 'mutant',
-        aggressive: { name: 'Мутант (агрессивный)', hp: 70, damage_min: 16, damage_max: 26, image: 'mutant_agg' }
+        name: 'Мутант', hp: 45, damage_min: 10, damage_max: 18, image: 'mutant', coins: 8,
+        aggressive: { name: 'Мутант (агрессивный)', hp: 70, damage_min: 16, damage_max: 26, image: 'mutant_agg', coins: 15 }
       }
+    },
+    shop: {
+      hp_upgrade: { cost: 30, hp_bonus: 15 },
+      extra_life: { cost: 50 },
+      trashcan_lid: { cost: 25 },
+      trashcan: { cost: 45 },
+      element_upgrade: { cost: 20 }
     },
     enemies_progression: { 0: 1, 2: 2, 5: 3 },
     unlock_locations: {
@@ -68,7 +87,12 @@
   }
 
   var state = {
-    player: { hp: 100, max_hp: 100, bread_count: 1, unlocked_cards: ['fist', 'knife', 'bread'] },
+    player: {
+      hp: 100, max_hp: 100, bread_count: 1, unlocked_cards: ['fist', 'knife', 'bread'],
+      coins: 15, extra_lives: 0, shield: null, weapon_elements: {},
+      elements_inventory: {}
+    },
+    deck: [], hand: [],
     progress: { battles_won: 0, nodes_visited: {}, current_node: 'start' },
     combat: null
   };
@@ -80,6 +104,16 @@
     return 1;
   }
 
+  function getAggressiveChance() {
+    var won = state.progress.battles_won;
+    var total = 16;
+    if (won >= 12) return 0.9;
+    if (won >= 8) return 0.7;
+    if (won >= 5) return 0.5;
+    if (won >= 3) return 0.3;
+    return 0.15;
+  }
+
   function tryUnlockCards(nodeId) {
     var loc = CONFIG.unlock_locations;
     for (var card in loc) {
@@ -89,7 +123,7 @@
   }
 
   function restHeal() {
-    state.player.hp = Math.min(CONFIG.player.max_hp, state.player.hp + 25);
+    state.player.hp = Math.min(state.player.max_hp, state.player.hp + 25);
     state.player.bread_count = Math.min(3, state.player.bread_count + 1);
   }
 
@@ -97,37 +131,74 @@
     return min >= max ? min : min + Math.floor(Math.random() * (max - min + 1));
   }
 
-  function startCombat(count) {
-    var types = Object.keys(CONFIG.enemies);
-    var enemies = [];
-    for (var i = 0; i < count; i++) {
-      var type = types[Math.floor(Math.random() * types.length)];
-      var base = CONFIG.enemies[type];
-      var agg = Math.random() < 0.5 && base.aggressive;
-      var e = agg ? base.aggressive : { name: base.name, hp: base.hp, damage_min: base.damage_min, damage_max: base.damage_max, image: base.image };
-      enemies.push({
-        id: 'e' + i, type: type, name: e.name, hp: e.hp, max_hp: e.hp,
-        damage_min: e.damage_min, damage_max: e.damage_max, image: e.image,
-        aggressive: !!agg, bleed: 0, fire_rounds: 0
-      });
+  function shuffleArray(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
     }
-    state.combat = { enemies: enemies, turn: 'player', log: [] };
+    return a;
   }
 
-  function getHand() {
-    var hand = [];
+  function buildDeck() {
+    var deck = [];
     var cards = CONFIG.cards;
     state.player.unlocked_cards.forEach(function (key) {
       if (!cards[key]) return;
       var c = cards[key];
       if (key === 'bread') {
         for (var i = 0; i < state.player.bread_count; i++)
-          hand.push({ key: key, name: c.name, type: c.type, data: c });
+          deck.push({ key: key, name: c.name, type: c.type, data: c });
       } else {
-        hand.push({ key: key, name: c.name, type: c.type, data: c });
+        deck.push({ key: key, name: c.name, type: c.type, data: c });
       }
     });
-    return hand;
+    return shuffleArray(deck);
+  }
+
+  function drawHand() {
+    state.deck = state.deck.length ? state.deck : buildDeck();
+    var handSize = Math.min(5, state.deck.length);
+    state.hand = state.deck.splice(0, handSize);
+  }
+
+  function getHand() {
+    if (!state.hand || state.hand.length === 0) drawHand();
+    return state.hand;
+  }
+
+  function useCardFromHand(cardKey) {
+    for (var i = 0; i < state.hand.length; i++) {
+      if (state.hand[i].key === cardKey) {
+        state.hand.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  function startCombat(count) {
+    var types = Object.keys(CONFIG.enemies);
+    var enemies = [];
+    var aggChance = getAggressiveChance();
+    for (var i = 0; i < count; i++) {
+      var type = types[Math.floor(Math.random() * types.length)];
+      var base = CONFIG.enemies[type];
+      var agg = Math.random() < aggChance && base.aggressive;
+      var e = agg ? base.aggressive : { name: base.name, hp: base.hp, damage_min: base.damage_min, damage_max: base.damage_max, image: base.image, coins: base.coins };
+      var coins = e.coins || base.coins || 5;
+      enemies.push({
+        id: 'e' + i, type: type, name: e.name, hp: e.hp, max_hp: e.hp,
+        damage_min: e.damage_min, damage_max: e.damage_max, image: e.image,
+        aggressive: !!agg, bleed: 0, fire_rounds: 0, freeze_rounds: 0, acid_rounds: 0,
+        acid_damage_boost: 0, coins: coins
+      });
+    }
+    drawHand();
+    state.combat = {
+      enemies: enemies, turn: 'player', log: [],
+      action_points: CONFIG.player.base_action_points,
+      max_action_points: CONFIG.player.base_action_points
+    };
   }
 
   function findEnemy(id) {
@@ -136,24 +207,122 @@
     return null;
   }
 
-  function damageEnemy(id, dmg, log) {
-    for (var i = 0; i < state.combat.enemies.length; i++) {
-      if (state.combat.enemies[i].id === id) {
-        state.combat.enemies[i].hp = Math.max(0, state.combat.enemies[i].hp - dmg);
-        log.push(state.combat.enemies[i].name + ': -' + dmg + ' HP');
-        return;
-      }
-    }
+  function getWeaponElements(cardKey) {
+    return state.player.weapon_elements[cardKey] || {};
+  }
+
+  function getElementLevel(elements, elem) {
+    return elements[elem] || 0;
+  }
+
+  function damageEnemy(id, dmg, log, cardKey) {
+    var enemy = findEnemy(id);
+    if (!enemy) return;
+    var elements = cardKey ? getWeaponElements(cardKey) : {};
+    var acidBoost = (enemy.acid_damage_boost || 0) / 100;
+    dmg = Math.floor(dmg * (1 + acidBoost));
+    enemy.hp = Math.max(0, enemy.hp - dmg);
+    log.push(enemy.name + ': -' + dmg + ' HP');
   }
 
   function addFire(id, rounds, dmgPerRound) {
-    for (var i = 0; i < state.combat.enemies.length; i++) {
-      if (state.combat.enemies[i].id === id) {
-        state.combat.enemies[i].fire_rounds = Math.max(state.combat.enemies[i].fire_rounds || 0, rounds);
-        state.combat.enemies[i].fire_damage_per_round = dmgPerRound;
-        return;
+    var enemy = findEnemy(id);
+    if (enemy) {
+      enemy.fire_rounds = Math.max(enemy.fire_rounds || 0, rounds);
+      enemy.fire_damage_per_round = dmgPerRound;
+    }
+  }
+
+  function addAcid(id, rounds, weaken, damageBoost) {
+    var enemy = findEnemy(id);
+    if (enemy) {
+      enemy.acid_rounds = Math.max(enemy.acid_rounds || 0, rounds);
+      enemy.acid_damage_boost = (enemy.acid_damage_boost || 0) + damageBoost;
+    }
+  }
+
+  function applyElementEffects(cardKey, targetId, baseDmg, log) {
+    var elements = getWeaponElements(cardKey);
+    var totalBonus = 0;
+    var enemies = state.combat.enemies;
+    for (var elem in elements) {
+      var lvl = elements[elem];
+      if (lvl <= 0) continue;
+      var cfg = ELEMENTS[elem];
+      if (!cfg) continue;
+      switch (elem) {
+        case 'electric':
+          var dmg = (cfg.damagePerLevel || 2) * lvl;
+          enemies.forEach(function (e) {
+            if ((targetId === null || e.id !== targetId) && e.hp > 0) {
+              damageEnemy(e.id, dmg, log, null);
+              totalBonus += dmg;
+            }
+          });
+          break;
+        case 'frost':
+          if (targetId) {
+            var f = findEnemy(targetId);
+            if (f && f.hp > 0) {
+              f.freeze_rounds = (cfg.freezeRounds || 1);
+              var fd = (cfg.damagePerLevel || 1) * lvl;
+              damageEnemy(targetId, fd, log, null);
+              log.push(f.name + ' застыл!');
+            }
+          } else {
+            enemies.forEach(function (en) {
+              if (en.hp > 0) {
+                en.freeze_rounds = (cfg.freezeRounds || 1);
+                var fd = (cfg.damagePerLevel || 1) * lvl;
+                damageEnemy(en.id, fd, log, null);
+                log.push(en.name + ' застыл!');
+              }
+            });
+          }
+          break;
+        case 'fire':
+          if (targetId) {
+            var fr = findEnemy(targetId);
+            if (fr && fr.hp > 0) {
+              var br = cfg.burnRounds || 2;
+              var bd = (cfg.burnDamagePerLevel || 2) * lvl;
+              addFire(targetId, br, bd);
+              log.push('Горение ' + br + ' хода!');
+            }
+          } else {
+            enemies.forEach(function (e) {
+              if (e.hp > 0) {
+                var br = cfg.burnRounds || 2;
+                var bd = (cfg.burnDamagePerLevel || 2) * lvl;
+                addFire(e.id, br, bd);
+                log.push('Горение на ' + e.name + '!');
+              }
+            });
+          }
+          break;
+        case 'acid':
+          if (targetId) {
+            var ar = findEnemy(targetId);
+            if (ar && ar.hp > 0) {
+              var wp = (cfg.weakenPercent || 10) * lvl;
+              var db = (cfg.damageBoostPercent || 15) * lvl;
+              addAcid(targetId, 2, wp, db);
+              log.push('Кислота ослабила врага!');
+            }
+          } else {
+            enemies.forEach(function (e) {
+              if (e.hp > 0) {
+                var wp = (cfg.weakenPercent || 10) * lvl;
+                var db = (cfg.damageBoostPercent || 15) * lvl;
+                addAcid(e.id, 2, wp, db);
+                log.push('Кислота на ' + e.name + '!');
+              }
+            });
+          }
+          break;
       }
     }
+    return totalBonus;
   }
 
   function applyBleedAndFire() {
@@ -170,23 +339,47 @@
         en[i].fire_rounds--;
         state.combat.log.push(en[i].name + ': огонь -' + d + ' HP');
       }
+      if ((en[i].acid_rounds || 0) > 0) en[i].acid_rounds--;
     }
     state.combat.enemies = en.filter(function (e) { return e.hp > 0; });
   }
 
+  function getBlockAmount() {
+    var s = state.player.shield;
+    if (!s || !CONFIG.shields[s]) return 0;
+    return CONFIG.shields[s].block || 0;
+  }
+
   function enemyTurn() {
+    var block = getBlockAmount();
     state.combat.enemies.forEach(function (e) {
       if (e.hp <= 0) return;
+      if ((e.freeze_rounds || 0) > 0) {
+        e.freeze_rounds--;
+        state.combat.log.push(e.name + ' заморожен, пропускает ход.');
+        return;
+      }
       var dmg = roll(e.damage_min, e.damage_max);
+      var acidWeaken = (e.acid_rounds || 0) > 0 ? 0.25 : 0;
+      dmg = Math.max(1, Math.floor(dmg * (1 - acidWeaken)));
+      dmg = Math.max(0, dmg - block);
       state.player.hp = Math.max(0, state.player.hp - dmg);
       state.combat.log.push(e.name + ' бьёт вас: -' + dmg + ' HP');
     });
     if (state.player.hp <= 0) {
-      state.combat.log.push('Вы погибли...');
-      state.combat.defeat = true;
-      return;
+      if (state.player.extra_lives > 0) {
+        state.player.extra_lives--;
+        state.player.hp = Math.floor(state.player.max_hp * 0.5);
+        state.combat.log.push('Доп. жизнь! Восстановлено ' + state.player.hp + ' HP.');
+      } else {
+        state.combat.log.push('Вы погибли...');
+        state.combat.defeat = true;
+        return;
+      }
     }
     state.combat.turn = 'player';
+    state.combat.action_points = CONFIG.player.base_action_points;
+    drawHand();
   }
 
   function endPlayerTurn() {
@@ -195,20 +388,47 @@
     enemyTurn();
   }
 
+  function dropLoot(enemies) {
+    var coins = 0;
+    var elements = {};
+    enemies.forEach(function (e) {
+      if (e.hp <= 0) {
+        coins += e.coins || 5;
+        if (Math.random() < 0.35) {
+          var elem = ELEMENT_KEYS[Math.floor(Math.random() * ELEMENT_KEYS.length)];
+          elements[elem] = (elements[elem] || 0) + 1;
+        }
+      }
+    });
+    state.player.coins += coins;
+    for (var k in elements) {
+      state.player.elements_inventory[k] = (state.player.elements_inventory[k] || 0) + elements[k];
+    }
+    return { coins: coins, elements: elements };
+  }
+
   function useCard(cardKey, targetId) {
     var combat = state.combat;
     if (!combat || combat.turn !== 'player') return { ok: false, error: 'Не ваш ход' };
+    if ((combat.action_points || 0) <= 0) return { ok: false, error: 'Нет очков действий' };
     var card = CONFIG.cards[cardKey];
     if (!card) return { ok: false, error: 'Нет такой карты' };
+    var inHand = false;
+    state.hand.forEach(function (c) { if (c.key === cardKey) inHand = true; });
+    if (!inHand) return { ok: false, error: 'Карты нет в руке' };
     var enemies = state.combat.enemies;
 
     if (card.type === 'heal') {
       if (cardKey === 'bread' && state.player.bread_count <= 0) return { ok: false, error: 'Нет хлеба' };
       var heal = card.heal;
-      state.player.hp = Math.min(CONFIG.player.max_hp, state.player.hp + heal);
+      state.player.hp = Math.min(state.player.max_hp, state.player.hp + heal);
       if (cardKey === 'bread') state.player.bread_count--;
       state.combat.log.push('Использовано: ' + card.name + '. +' + heal + ' HP.');
-      endPlayerTurn();
+      useCardFromHand(cardKey);
+      combat.action_points--;
+      if (combat.action_points <= 0) {
+        endPlayerTurn();
+      }
       return { ok: true };
     }
 
@@ -218,44 +438,91 @@
         if (!targetId) return { ok: false, error: 'Выберите цель' };
         if (!findEnemy(targetId)) return { ok: false, error: 'Цель не найдена' };
         var dmg = roll(card.damage_min, card.damage_max);
-        damageEnemy(targetId, dmg, log);
+        damageEnemy(targetId, dmg, log, cardKey);
+        applyElementEffects(cardKey, targetId, dmg, log);
         if (card.effect === 'bleed' && Math.floor(Math.random() * 100) < (card.bleed_chance || 30)) {
-          for (var j = 0; j < state.combat.enemies.length; j++)
-            if (state.combat.enemies[j].id === targetId) state.combat.enemies[j].bleed = 3;
+          var t = findEnemy(targetId);
+          if (t) t.bleed = 3;
           log.push('Кровотечение!');
         }
         break;
       case 'all':
         enemies.forEach(function (e) {
-          damageEnemy(e.id, roll(card.damage_min, card.damage_max), log);
+          damageEnemy(e.id, roll(card.damage_min, card.damage_max), log, cardKey);
         });
+        applyElementEffects(cardKey, null, 0, log);
         break;
       case 'volley3':
         if (!targetId) return { ok: false, error: 'Выберите цель' };
         for (var v = 0; v < (card.volley_count || 3); v++)
-          damageEnemy(targetId, roll(card.damage_min, card.damage_max), log);
+          damageEnemy(targetId, roll(card.damage_min, card.damage_max), log, cardKey);
+        applyElementEffects(cardKey, targetId, 0, log);
         break;
       case 'rocket':
         if (!targetId) return { ok: false, error: 'Выберите цель' };
-        damageEnemy(targetId, roll(card.damage_min, card.damage_max), log);
+        damageEnemy(targetId, roll(card.damage_min, card.damage_max), log, cardKey);
         var splash = card.splash_damage || 5, fr = card.fire_rounds || 3, fd = card.fire_damage_per_round || 4;
         enemies.forEach(function (e) {
           addFire(e.id, fr, fd);
-          if (e.id !== targetId) damageEnemy(e.id, splash, log);
+          if (e.id !== targetId) damageEnemy(e.id, splash, log, null);
         });
+        applyElementEffects(cardKey, targetId, 0, log);
         log.push('Огонь на ' + fr + ' хода!');
         break;
       default:
         return { ok: false, error: 'Неизвестная карта' };
     }
     log.forEach(function (line) { state.combat.log.push(line); });
+    useCardFromHand(cardKey);
+    combat.action_points--;
+    var allEnemies = combat.enemies.slice();
     state.combat.enemies = state.combat.enemies.filter(function (e) { return e.hp > 0; });
     if (state.combat.enemies.length === 0) {
+      var killed = allEnemies.filter(function (e) { return e.hp <= 0; });
+      var loot = dropLoot(killed);
       state.progress.battles_won++;
       state.combat = null;
-      return { ok: true, victory: true };
+      return { ok: true, victory: true, loot: loot };
     }
-    endPlayerTurn();
+    if (combat.action_points <= 0) {
+      endPlayerTurn();
+    }
+    return { ok: true };
+  }
+
+  function buyShopItem(item) {
+    var shop = CONFIG.shop[item];
+    if (!shop) return { ok: false, error: 'Нет такого товара' };
+    if (state.player.coins < shop.cost) return { ok: false, error: 'Недостаточно монет' };
+    if (item === 'hp_upgrade') {
+      state.player.max_hp += shop.hp_bonus;
+      state.player.hp += shop.hp_bonus;
+    } else if (item === 'extra_life') {
+      state.player.extra_lives++;
+    } else if (item === 'trashcan_lid') {
+      if (state.player.shield === 'trashcan') return { ok: false, error: 'У вас уже лучше' };
+      state.player.shield = 'trashcan_lid';
+    } else if (item === 'trashcan') {
+      state.player.shield = 'trashcan';
+    } else if (item === 'element_upgrade') {
+      return { ok: false, error: 'Используйте прокачку элемента на оружии' };
+    }
+    state.player.coins -= shop.cost;
+    return { ok: true };
+  }
+
+  function buyElementUpgrade(weaponKey, elementKey) {
+    var inv = state.player.elements_inventory[elementKey] || 0;
+    if (inv <= 0) return { ok: false, error: 'Нет элементов ' + (ELEMENTS[elementKey] ? ELEMENTS[elementKey].name : elementKey) };
+    var we = state.player.weapon_elements[weaponKey] || {};
+    var cur = we[elementKey] || 0;
+    if (cur >= 3) return { ok: false, error: 'Макс. уровень элемента на оружии' };
+    var cost = CONFIG.shop.element_upgrade.cost;
+    if (state.player.coins < cost) return { ok: false, error: 'Недостаточно монет (' + cost + ')' };
+    state.player.coins -= cost;
+    state.player.elements_inventory[elementKey]--;
+    we[elementKey] = cur + 1;
+    state.player.weapon_elements[weaponKey] = we;
     return { ok: true };
   }
 
@@ -275,7 +542,13 @@
   }
 
   function resetGame() {
-    state.player = { hp: 100, max_hp: 100, bread_count: 1, unlocked_cards: ['fist', 'knife', 'bread'] };
+    state.player = {
+      hp: 100, max_hp: 100, bread_count: 1, unlocked_cards: ['fist', 'knife', 'bread'],
+      coins: 15, extra_lives: 0, shield: null, weapon_elements: {},
+      elements_inventory: {}
+    };
+    state.deck = [];
+    state.hand = [];
     state.progress = { battles_won: 0, nodes_visited: {}, current_node: 'start' };
     state.combat = null;
   }
@@ -290,16 +563,35 @@
     return div.innerHTML;
   }
 
+  function getWeaponCards() {
+    var weapons = [];
+    for (var k in CONFIG.cards) {
+      var c = CONFIG.cards[k];
+      if (c.type === 'weapon' && state.player.unlocked_cards.indexOf(k) !== -1)
+        weapons.push(k);
+    }
+    return weapons;
+  }
+
   function render() {
     var main = document.getElementById('main');
     var hpFill = document.getElementById('hpFill');
     var hpValue = document.getElementById('hpValue');
     var progressEl = document.getElementById('progress');
+    var coinsEl = document.getElementById('coins');
+    var actionsEl = document.getElementById('actionPoints');
     var p = state.player;
     var hpPct = p.max_hp ? Math.min(100, Math.round(p.hp / p.max_hp * 100)) : 0;
     hpFill.style.width = hpPct + '%';
     hpValue.textContent = p.hp + ' / ' + p.max_hp;
     progressEl.textContent = 'Побед: ' + state.progress.battles_won;
+    if (coinsEl) coinsEl.textContent = p.coins + ' монет';
+    if (actionsEl && state.combat) {
+      actionsEl.textContent = 'Действия: ' + state.combat.action_points + ' / ' + state.combat.max_action_points;
+      actionsEl.style.display = 'inline';
+    } else if (actionsEl) actionsEl.style.display = 'none';
+    var extraEl = document.getElementById('extraLives');
+    if (extraEl) extraEl.textContent = p.extra_lives > 0 ? 'Жизни: ' + p.extra_lives : '';
 
     if (state.player.hp <= 0 || (state.combat && state.combat.defeat)) {
       main.innerHTML = '<section class="screen screen-defeat"><h1>Поражение</h1><p>Вы погибли в бою.</p><button type="button" class="btn btn-primary" id="btnResetDefeat">Начать заново</button></section>';
@@ -309,7 +601,11 @@
 
     if (state.combat) {
       var node = MAP[state.progress.current_node];
-      var html = '<section class="screen screen-combat"><h2>Бой — ' + escapeHtml(node.name) + '</h2><div class="combat-enemies">';
+      var ap = state.combat.action_points;
+      var html = '<section class="screen screen-combat"><h2>Бой — ' + escapeHtml(node.name) + '</h2>';
+      html += '<div class="combat-stats"><span class="ap-display">Очки действий: ' + ap + ' / ' + state.combat.max_action_points + '</span>';
+      if (p.shield) html += '<span class="shield-display">Щит: ' + (CONFIG.shields[p.shield] ? CONFIG.shields[p.shield].name : p.shield) + ' (блок ' + getBlockAmount() + ')</span>';
+      html += '</div><div class="combat-enemies">';
       state.combat.enemies.forEach(function (e) {
         var svg = enemySvg(e.image, 'g-' + e.id);
         html += '<div class="enemy-card' + (e.aggressive ? ' enemy-aggressive' : '') + '" data-enemy-id="' + escapeHtml(e.id) + '">';
@@ -318,24 +614,31 @@
         html += '<div class="enemy-hp"><div class="enemy-hp-bar"><div class="enemy-hp-fill" style="width:' + (e.max_hp ? Math.round(e.hp / e.max_hp * 100) : 0) + '%"></div></div><span>' + e.hp + ' / ' + e.max_hp + '</span></div>';
         if (e.fire_rounds) html += '<span class="status status-fire">Огонь ' + e.fire_rounds + '</span>';
         if (e.bleed) html += '<span class="status status-bleed">Кровь ' + e.bleed + '</span>';
+        if (e.freeze_rounds) html += '<span class="status status-frost">Заморозка</span>';
+        if (e.acid_rounds) html += '<span class="status status-acid">Кислота</span>';
         html += '</div>';
       });
       html += '</div><div class="combat-log">';
-      (state.combat.log.slice(-8)).forEach(function (line) {
+      (state.combat.log.slice(-10)).forEach(function (line) {
         html += '<div class="log-line">' + escapeHtml(line) + '</div>';
       });
       html += '</div>';
       if (state.combat.turn === 'player') {
-        html += '<div class="combat-hand"><p class="hand-label">Выберите карту (и цель при необходимости):</p><div class="hand-cards">';
+        html += '<div class="combat-hand"><p class="hand-label">Карты (каждая тратит 1 очко действия). Выберите карту:</p><div class="hand-cards">';
         getHand().forEach(function (card) {
           var needTarget = ['single', 'volley3', 'rocket'].indexOf((card.data.target || '')) !== -1;
-          html += '<button type="button" class="card-btn" data-card-key="' + escapeHtml(card.key) + '" data-need-target="' + (needTarget ? '1' : '0') + '">';
-          html += '<span class="card-name">' + escapeHtml(card.name) + '</span>';
+          var elemStr = '';
+          var we = getWeaponElements(card.key);
+          for (var ek in we) { if (we[ek]) elemStr += ' [' + (ELEMENTS[ek] ? ELEMENTS[ek].name : ek) + 'x' + we[ek] + ']'; }
+          html += '<button type="button" class="card-btn' + (ap <= 0 ? ' disabled' : '') + '" data-card-key="' + escapeHtml(card.key) + '" data-need-target="' + (needTarget ? '1' : '0') + '">';
+          html += '<span class="card-name">' + escapeHtml(card.name) + elemStr + '</span>';
           if (card.type === 'weapon') html += '<span class="card-damage">' + (card.data.damage_min || 0) + '–' + (card.data.damage_max || 0) + ' урона</span>';
           else html += '<span class="card-heal">+' + (card.data.heal || 0) + ' HP</span>';
           html += '</button>';
         });
-        html += '</div><p class="target-hint" id="targetHint" style="display:none">Выберите цель среди врагов.</p></div>';
+        html += '</div><p class="target-hint" id="targetHint" style="display:none">Выберите цель среди врагов.</p>';
+        if (ap > 0) html += '<button type="button" class="btn btn-secondary" id="btnEndTurn">Завершить ход</button>';
+        html += '</div>';
       } else {
         html += '<p class="turn-info">Ход врагов...</p><button type="button" class="btn btn-primary" id="btnEnemyTurn">Продолжить</button>';
       }
@@ -344,11 +647,12 @@
 
       if (state.combat.turn === 'player') {
         var targetHint = document.getElementById('targetHint');
-        var cardBtns = main.querySelectorAll('.card-btn');
+        var cardBtns = main.querySelectorAll('.card-btn:not(.disabled)');
         var enemyCards = main.querySelectorAll('.enemy-card[data-enemy-id]');
         var selectedCard = null;
         cardBtns.forEach(function (btn) {
           btn.onclick = function () {
+            if (ap <= 0) return;
             var need = btn.dataset.needTarget === '1';
             var key = btn.dataset.cardKey;
             if (need) {
@@ -365,11 +669,13 @@
         });
         enemyCards.forEach(function (el) {
           el.onclick = function () {
-            if (!selectedCard) return;
+            if (!selectedCard || ap <= 0) return;
             var r = useCard(selectedCard, el.dataset.enemyId);
             if (!r.ok) alert(r.error); else render();
           };
         });
+        var btnEndTurn = document.getElementById('btnEndTurn');
+        if (btnEndTurn) btnEndTurn.onclick = function () { endPlayerTurn(); render(); };
       } else {
         document.getElementById('btnEnemyTurn').onclick = function () { render(); };
       }
@@ -380,6 +686,41 @@
     var nextIds = currentNode.next || [];
     var html = '<section class="screen screen-map"><h2>Карта</h2>';
     html += '<div class="current-node">Вы находитесь: <strong>' + escapeHtml(currentNode.name) + '</strong> (' + typeLabel(currentNode.type) + ')</div>';
+    if (currentNode.type === 'shop') {
+      html += '<div class="shop-panel"><h3>Магазин</h3><p class="coins-display">У вас: ' + p.coins + ' монет</p>';
+      var elemInv = [];
+      ELEMENT_KEYS.forEach(function (ek) {
+        var n = p.elements_inventory[ek] || 0;
+        if (n > 0) elemInv.push((ELEMENTS[ek] ? ELEMENTS[ek].name : ek) + ': ' + n);
+      });
+      if (elemInv.length) html += '<p class="elements-display">Элементы: ' + elemInv.join(', ') + '</p>';
+      html += '<div class="shop-items">';
+      html += '<button type="button" class="shop-btn" data-item="hp_upgrade">+15 HP макс. (' + CONFIG.shop.hp_upgrade.cost + ' монет)</button>';
+      html += '<button type="button" class="shop-btn" data-item="extra_life">Доп. жизнь (' + CONFIG.shop.extra_life.cost + ' монет)</button>';
+      if (p.shield !== 'trashcan_lid' && p.shield !== 'trashcan')
+        html += '<button type="button" class="shop-btn" data-item="trashcan_lid">Крышка ведра — блок 6 (' + CONFIG.shop.trashcan_lid.cost + ')</button>';
+      if (p.shield !== 'trashcan')
+        html += '<button type="button" class="shop-btn" data-item="trashcan">Мусорное ведро — блок 12 (' + CONFIG.shop.trashcan.cost + ')</button>';
+      html += '</div>';
+      html += '<h4>Прокачка оружия элементами (20 монет за уровень)</h4><div class="element-upgrades">';
+      var weapons = getWeaponCards();
+      weapons.forEach(function (wk) {
+        var we = p.weapon_elements[wk] || {};
+        var cardName = CONFIG.cards[wk] ? CONFIG.cards[wk].name : wk;
+        html += '<div class="weapon-row"><span class="weapon-name">' + escapeHtml(cardName) + ':</span> ';
+        ELEMENT_KEYS.forEach(function (ek) {
+          var cur = we[ek] || 0;
+          var inv = p.elements_inventory[ek] || 0;
+          var name = ELEMENTS[ek] ? ELEMENTS[ek].name : ek;
+          if (cur < 3 && inv > 0)
+            html += '<button type="button" class="elem-btn" data-weapon="' + wk + '" data-elem="' + ek + '">' + name + ' +1 (есть ' + inv + ')</button> ';
+          else if (cur > 0)
+            html += '<span class="elem-owned">' + name + ' x' + cur + '</span> ';
+        });
+        html += '</div>';
+      });
+      html += '</div></div>';
+    }
     html += '<div class="map-moves"><p>Куда идти?</p>';
     nextIds.forEach(function (nid) {
       var n = MAP[nid];
@@ -389,14 +730,29 @@
     });
     html += '</div>';
     if (currentNode.type === 'rest') html += '<div class="rest-info">Вы отдохнули. +25 HP, +1 хлеб (макс. 3).</div>';
-    if (currentNode.type === 'shop') html += '<div class="shop-info">Здесь можно развиться. Новые карты открываются при посещении локаций.</div>';
+    if (currentNode.type === 'shop' && !document.querySelector('.shop-panel')) { }
     if (currentNode.type === 'finish') html += '<div class="finish-info">Поздравляем! Вы прошли игру. Побед в боях: ' + state.progress.battles_won + '.</div>';
     html += '</section>';
     main.innerHTML = html;
+
     main.querySelectorAll('.move-btn').forEach(function (btn) {
       btn.onclick = function () {
         moveTo(btn.dataset.nodeId);
         render();
+      };
+    });
+
+    main.querySelectorAll('.shop-btn').forEach(function (btn) {
+      btn.onclick = function () {
+        var r = buyShopItem(btn.dataset.item);
+        if (!r.ok) alert(r.error); else render();
+      };
+    });
+
+    main.querySelectorAll('.elem-btn').forEach(function (btn) {
+      btn.onclick = function () {
+        var r = buyElementUpgrade(btn.dataset.weapon, btn.dataset.elem);
+        if (!r.ok) alert(r.error); else render();
       };
     });
   }
