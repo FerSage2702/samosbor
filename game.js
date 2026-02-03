@@ -55,56 +55,82 @@
     shop_random_pool: ['extra_life', 'trashcan_lid', 'trashcan', 'axe', 'sgushka', 'gvozdomet', 'rocket', 'medkit', 'bread'],
     enemies_progression: { 0: 1, 2: 2, 5: 3 },
     location_names: {
-      enemy: ['Тёмная аллея', 'Развалины', 'Подвал', 'Туннель', 'Заброшка', 'Опасная зона', 'Глушь', 'Свалка', 'Канализация', 'Разрушенный дом', 'Тёмный переулок', 'Заброшенный склад', 'Проклятое место', 'Логово мутантов', 'Радиационная зона'],
-      rest: ['Привал', 'Кострище', 'Укрытие', 'Ночлёг', 'Безопасная зона', 'Развалины с костром', 'Тайное убежище', 'Перекрёсток путников', 'Сухой подвал', 'Заброшенная избушка'],
-      shop: ['Торговец', 'Склад', 'База', 'Лагерь торговцев', 'Подпольный рынок', 'Склад контрабанды', 'Точка обмена', 'Тайный продавец', 'База сталкеров']
+      enemy: ['Тёмная аллея', 'Развалины', 'Подвал', 'Туннель', 'Заброшка', 'Опасная зона', 'Глушь', 'Свалка', 'Канализация', 'Разрушенный дом', 'Тёмный переулок', 'Заброшенный склад', 'Проклятое место', 'Логово мутантов', 'Радиационная зона', 'Мёртвый двор', 'Трещина в земле', 'Затопленный бункер', 'Гнездо крыс', 'Лабиринт труб'],
+      rest: ['Привал', 'Кострище', 'Укрытие', 'Ночлёг', 'Безопасная зона', 'Развалины с костром', 'Тайное убежище', 'Перекрёсток путников', 'Сухой подвал', 'Заброшенная избушка', 'Навес от дождя', 'Пещера', 'Разбитый автобус', 'Крыша цеха'],
+      shop: ['Торговец', 'Склад', 'База', 'Лагерь торговцев', 'Подпольный рынок', 'Склад контрабанды', 'Точка обмена', 'Тайный продавец', 'База сталкеров', 'Бартерный пост', 'Чёрный рынок', 'Складчик']
     }
   };
 
+  var FLOORS_PER_CHAPTER = 10;
+
   function generateMap() {
-    var names = CONFIG.location_names;
     var map = {};
     var nodeId = 0;
-    function nextId() { return 'n' + (nodeId++); }
-    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-    function pickType() {
+    function nextId() { return 'n' + nodeId++ + '_' + Math.random().toString(36).slice(2, 8); }
+    function pickUnique(arr, used) {
+      var left = arr.filter(function (x) { return !used[x]; });
+      return left[Math.floor(Math.random() * left.length)] || arr[Math.floor(Math.random() * arr.length)];
+    }
+    var usedNames = { enemy: {}, rest: {}, shop: {} };
+    function getName(type) {
+      var arr = CONFIG.location_names[type];
+      var name = pickUnique(arr, usedNames[type]);
+      usedNames[type][name] = true;
+      return name;
+    }
+    function pickType(floorIndex) {
       var r = Math.random();
-      if (r < 0.55) return 'enemy';
-      if (r < 0.8) return 'rest';
+      if (floorIndex < 3) {
+        if (r < 0.6) return 'enemy';
+        if (r < 0.85) return 'rest';
+        return 'shop';
+      }
+      if (floorIndex >= 7) {
+        if (r < 0.65) return 'enemy';
+        if (r < 0.9) return 'rest';
+        return 'shop';
+      }
+      if (r < 0.5) return 'enemy';
+      if (r < 0.78) return 'rest';
       return 'shop';
     }
-    map.start = { id: 'start', type: 'start', next: [], name: 'Старт' };
-    map.finish = { id: 'finish', type: 'finish', next: [], name: 'Победа' };
-    var layerCount = roll(5, 8);
+    map.start = { id: 'start', type: 'start', next: [], name: 'Старт', floor: 1 };
+    map.finish = { id: 'finish', type: 'finish', next: [], name: 'Финал этажа', floor: FLOORS_PER_CHAPTER };
     var prevIds = ['start'];
-    for (var L = 0; L < layerCount; L++) {
-      var nodeCount = roll(2, 4);
-      if (L === layerCount - 1) nodeCount = 1;
+    for (var L = 0; L < FLOORS_PER_CHAPTER - 1; L++) {
+      var nodeCount = L === 0 ? roll(2, 4) : roll(1, 5);
       var currIds = [];
+      var nodeFloor = L + 2;
       for (var i = 0; i < nodeCount; i++) {
-        var id = L === layerCount - 1 ? 'finish' : nextId();
-        var type = L === layerCount - 1 ? 'finish' : pickType();
-        var name = type === 'finish' ? 'Победа' : pick(names[type]);
-        map[id] = { id: id, type: type, next: [], name: name };
+        var id = nextId();
+        var type = pickType(L);
+        var name = getName(type);
+        map[id] = { id: id, type: type, next: [], name: name, floor: nodeFloor };
         currIds.push(id);
       }
       prevIds.forEach(function (fromId) {
-        var links = Math.min(currIds.length, roll(1, 2));
-        var connected = {};
-        for (var j = 0; j < links; j++) {
+        var numLinks = Math.min(currIds.length, roll(1, 3));
+        for (var j = 0; j < numLinks; j++) {
           var toId = currIds[Math.floor(Math.random() * currIds.length)];
           if (map[fromId].next.indexOf(toId) === -1) map[fromId].next.push(toId);
         }
         if (map[fromId].next.length === 0 && currIds.length > 0)
-          map[fromId].next.push(currIds[0]);
+          map[fromId].next.push(currIds[Math.floor(Math.random() * currIds.length)]);
       });
       prevIds = currIds;
     }
     prevIds.forEach(function (fromId) {
-      if (map[fromId] && map[fromId].type !== 'finish' && map[fromId].next.indexOf('finish') === -1)
+      if (map[fromId] && map[fromId].next.indexOf('finish') === -1)
         map[fromId].next.push('finish');
     });
     return map;
+  }
+
+  function startNextChapter() {
+    state.map = generateMap();
+    state.progress.current_node = 'start';
+    state.progress.nodes_visited = {};
+    state.progress.floor_chapter = (state.progress.floor_chapter || 0) + 1;
   }
 
   function enemySvg(key, uid) {
@@ -129,7 +155,7 @@
     deck: [], hand: [],
     shop_random_items: [],
     map: null,
-    progress: { battles_won: 0, nodes_visited: {}, current_node: 'start' },
+    progress: { battles_won: 0, nodes_visited: {}, current_node: 'start', floor_chapter: 1 },
     combat: null
   };
   if (!state.map || !state.map.start) state.map = generateMap();
@@ -623,7 +649,7 @@
     state.hand = [];
     state.shop_random_items = [];
     state.map = generateMap();
-    state.progress = { battles_won: 0, nodes_visited: {}, current_node: 'start' };
+    state.progress = { battles_won: 0, nodes_visited: {}, current_node: 'start', floor_chapter: 1 };
     state.combat = null;
   }
 
@@ -658,7 +684,7 @@
     var hpPct = p.max_hp ? Math.min(100, Math.round(p.hp / p.max_hp * 100)) : 0;
     hpFill.style.width = hpPct + '%';
     hpValue.textContent = p.hp + ' / ' + p.max_hp;
-    progressEl.textContent = 'Побед: ' + state.progress.battles_won;
+    progressEl.textContent = 'Побед: ' + state.progress.battles_won + ' | Глава ' + (state.progress.floor_chapter || 1);
     if (coinsEl) coinsEl.textContent = p.coins + ' монет';
     if (actionsEl && state.combat) {
       actionsEl.textContent = 'Действия: ' + state.combat.action_points + ' / ' + state.combat.max_action_points;
@@ -760,7 +786,8 @@
     var currentNode = MAP[state.progress.current_node] || MAP.start;
     var nextIds = currentNode.next || [];
     var html = '<section class="screen screen-map"><h2>Карта</h2>';
-    html += '<div class="current-node">Вы находитесь: <strong>' + escapeHtml(currentNode.name) + '</strong> (' + typeLabel(currentNode.type) + ')</div>';
+    var floorNum = currentNode.floor || 1;
+    html += '<div class="current-node">Этаж ' + floorNum + ' / 10. Вы находитесь: <strong>' + escapeHtml(currentNode.name) + '</strong> (' + typeLabel(currentNode.type) + ')</div>';
     if (currentNode.type === 'shop') {
       html += '<div class="shop-panel"><h3>Магазин</h3><p class="coins-display">У вас: ' + p.coins + ' монет</p>';
       var elemInv = [];
@@ -801,6 +828,7 @@
       });
       html += '</div></div>';
     }
+    if (currentNode.type !== 'finish') {
     html += '<div class="map-moves"><p>Куда идти?</p>';
     nextIds.forEach(function (nid) {
       var n = MAP[nid];
@@ -809,9 +837,17 @@
       html += escapeHtml(n.name) + ' <span class="node-type">(' + typeLabel(n.type) + ')</span></button>';
     });
     html += '</div>';
+    }
     if (currentNode.type === 'rest') html += '<div class="rest-info">Вы отдохнули. +25 HP, +1 хлеб (макс. 3).</div>';
     if (currentNode.type === 'shop' && !document.querySelector('.shop-panel')) { }
-    if (currentNode.type === 'finish') html += '<div class="finish-info">Поздравляем! Вы прошли игру. Побед в боях: ' + state.progress.battles_won + '.</div>';
+    if (currentNode.type === 'finish') {
+      var chapter = state.progress.floor_chapter || 1;
+      html += '<div class="finish-info">';
+      html += '<p>Этаж 10 пройден! Побед в боях: ' + state.progress.battles_won + '.</p>';
+      html += '<p>Глава ' + chapter + ' завершена. Игра продолжается.</p>';
+      html += '<button type="button" class="btn btn-primary" id="btnNextChapter">Следующий этаж (глава ' + (chapter + 1) + ')</button>';
+      html += '</div>';
+    }
     html += '</section>';
     main.innerHTML = html;
 
@@ -821,6 +857,9 @@
         render();
       };
     });
+
+    var btnNext = document.getElementById('btnNextChapter');
+    if (btnNext) btnNext.onclick = function () { startNextChapter(); render(); };
 
     main.querySelectorAll('.shop-btn').forEach(function (btn) {
       btn.onclick = function () {
