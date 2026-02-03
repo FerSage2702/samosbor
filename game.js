@@ -259,6 +259,22 @@
     return state.hand;
   }
 
+  function getHandSlots() {
+    var hand = getHand();
+    var slots = [];
+    var healKeys = { bread: true, medkit: true };
+    hand.forEach(function (card) {
+      if (healKeys[card.key]) {
+        var slot = slots.filter(function (s) { return s.key === card.key; })[0];
+        if (slot) slot.count++;
+        else slots.push({ key: card.key, card: card, count: 1 });
+      } else {
+        slots.push({ key: card.key, card: card, count: 1 });
+      }
+    });
+    return slots;
+  }
+
   function useCardFromHand(cardKey) {
     for (var i = 0; i < state.hand.length; i++) {
       if (state.hand[i].key === cardKey) {
@@ -755,6 +771,12 @@
     hpValue.textContent = p.hp + ' / ' + p.max_hp;
     progressEl.textContent = 'Побед: ' + state.progress.battles_won + ' | Глава ' + (state.progress.floor_chapter || 1);
     if (coinsEl) coinsEl.textContent = p.coins + ' монет';
+    var shieldEl = document.getElementById('shieldResist');
+    if (shieldEl) {
+      var block = getBlockAmount();
+      shieldEl.textContent = block > 0 ? 'Резист: ' + block : '';
+      shieldEl.style.display = block > 0 ? '' : 'none';
+    }
     if (actionsEl && state.combat) {
       actionsEl.textContent = 'Действия: ' + state.combat.action_points + ' / ' + state.combat.max_action_points;
       actionsEl.style.display = 'inline';
@@ -773,7 +795,7 @@
       var ap = state.combat.action_points;
       var html = '<section class="screen screen-combat"><h2>Бой — ' + escapeHtml(node.name) + '</h2>';
       html += '<div class="combat-stats"><span class="ap-display">Очки действий: ' + ap + ' / ' + state.combat.max_action_points + '</span>';
-      if (p.shield) html += '<span class="shield-display">Щит: ' + (CONFIG.shields[p.shield] ? CONFIG.shields[p.shield].name : p.shield) + ' (блок ' + getBlockAmount() + ')</span>';
+      if (p.shield) html += '<span class="shield-display">Резист урона: ' + getBlockAmount() + '</span>';
       html += '</div><div class="combat-enemies">';
       state.combat.enemies.forEach(function (e) {
         var svg = enemySvg(e.image, 'g-' + e.id);
@@ -794,13 +816,15 @@
       html += '</div>';
       if (state.combat.turn === 'player') {
         html += '<div class="combat-hand"><p class="hand-label">Карты (каждая тратит 1 очко действия). Выберите карту:</p><div class="hand-cards">';
-        getHand().forEach(function (card) {
+        getHandSlots().forEach(function (slot) {
+          var card = slot.card;
           var needTarget = ['single', 'volley3', 'rocket'].indexOf((card.data.target || '')) !== -1;
           var elemStr = '';
           var we = getWeaponElements(card.key);
           for (var ek in we) { if (we[ek]) elemStr += ' [' + (ELEMENTS[ek] ? ELEMENTS[ek].name : ek) + 'x' + we[ek] + ']'; }
+          var nameStr = escapeHtml(card.name) + (slot.count > 1 ? ' ×' + slot.count : '') + elemStr;
           html += '<button type="button" class="card-btn' + (ap <= 0 ? ' disabled' : '') + '" data-card-key="' + escapeHtml(card.key) + '" data-need-target="' + (needTarget ? '1' : '0') + '">';
-          html += '<span class="card-name">' + escapeHtml(card.name) + elemStr + '</span>';
+          html += '<span class="card-name">' + nameStr + '</span>';
           if (card.type === 'weapon') html += '<span class="card-damage">' + (card.data.damage_min || 0) + '–' + (card.data.damage_max || 0) + ' урона</span>';
           else html += '<span class="card-heal">+' + (card.data.heal || 0) + ' HP</span>';
           html += '</button>';
