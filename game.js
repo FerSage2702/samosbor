@@ -188,6 +188,31 @@
     state.player.bread_count = Math.min(3, state.player.bread_count + 1);
   }
 
+  function giveRestLoot() {
+    var choice = roll(1, 3);
+    if (choice === 1) {
+      var healType = roll(1, 2);
+      if (healType === 1) {
+        state.player.bread_count = Math.min(3, state.player.bread_count + 1);
+        return { type: 'heal', text: 'Буханка хлеба (+1 в запас)' };
+      }
+      if (state.player.unlocked_cards.indexOf('medkit') === -1) {
+        state.player.unlocked_cards.push('medkit');
+        return { type: 'heal', text: 'Найдена аптечка (добавлена в колоду)' };
+      }
+      state.player.bread_count = Math.min(3, state.player.bread_count + 1);
+      return { type: 'heal', text: 'Буханка хлеба (+1 в запас)' };
+    }
+    if (choice === 2) {
+      var amount = roll(8, 22);
+      state.player.coins += amount;
+      return { type: 'coins', text: amount + ' монет' };
+    }
+    var elemKey = ELEMENT_KEYS[Math.floor(Math.random() * ELEMENT_KEYS.length)];
+    state.player.elements_inventory[elemKey] = (state.player.elements_inventory[elemKey] || 0) + 1;
+    return { type: 'element', text: 'Аномалия: ' + (ELEMENTS[elemKey].name) };
+  }
+
   function roll(min, max) {
     return min >= max ? min : min + Math.floor(Math.random() * (max - min + 1));
   }
@@ -639,7 +664,10 @@
       startCombat(getEnemyCount(act, isFinale));
       return { ok: true, combat: true };
     }
-    if (node.type === 'rest') restHeal();
+    if (node.type === 'rest') {
+      restHeal();
+      state.progress.last_rest_loot = giveRestLoot();
+    }
     if (node.type === 'shop') generateShopItems();
     return { ok: true };
   }
@@ -843,7 +871,12 @@
     });
     html += '</div>';
     }
-    if (currentNode.type === 'rest') html += '<div class="rest-info">Вы отдохнули. +25 HP, +1 хлеб (макс. 3).</div>';
+    if (currentNode.type === 'rest') {
+      html += '<div class="rest-info">Вы отдохнули. +25 HP, +1 хлеб (макс. 3).</div>';
+      if (state.progress.last_rest_loot) {
+        html += '<div class="rest-loot">Найдено: ' + escapeHtml(state.progress.last_rest_loot.text) + '.</div>';
+      }
+    }
     if (currentNode.type === 'shop' && !document.querySelector('.shop-panel')) { }
     if (currentNode.type === 'finish') {
       var chapter = state.progress.floor_chapter || 1;
